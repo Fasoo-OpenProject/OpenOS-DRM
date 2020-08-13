@@ -152,6 +152,7 @@ int ADK_SetLastError(long lError)
 int ADK_GetDomainId(void *pContentInfo, char *szDomainID, int iBufferSize)
 {
     //Implementation
+    // This function does not use in normal case.
     printf(" ADK_GetDomainId called!!..\n");
     return 1;        
 }
