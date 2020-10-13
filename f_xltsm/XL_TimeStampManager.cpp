@@ -1,16 +1,13 @@
-// ConsoleApplication1.cpp : 콘솔 응용 프로그램에 대한 진입점을 정의합니다.
-//
-
 #include "XL_TimeStampManager.h"
 #include <wchar.h>
 #include <cstring>
 #include <stdarg.h>
 
-#define PM_MODULEPATH		"/usr/local/fasoo/f_cmh_pm.dll"
+#define PM_MODULEPATH	    "/usr/local/fasoo/f_cmh_pm.dll"
 #define ERROR_SUCCESS       0L
 #define WAIT_TIMEOUT        258L
 #define STATUS_WAIT_0       ((unsigned long)0x00000000L)    
-#define WAIT_FAILED			((unsigned long)0xFFFFFFFF)
+#define WAIT_FAILED         ((unsigned long)0xFFFFFFFF)
 #define WAIT_OBJECT_0       ((STATUS_WAIT_0) + 0)
 
 LPXLTSMFUNCSTRUCT g_lpXLTSMFuncStruct = NULL;
