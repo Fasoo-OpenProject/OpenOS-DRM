@@ -1,106 +1,277 @@
+ï»¿#include <stdio.h>
+#include <strings.h>
+#include <pthread.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <dlfcn.h>
 #include <cstring>
-
+#include <stdarg.h>
+#include <iconv.h>
+#include <vector>
+#include <locale>
+#include <algorithm>
 #include "f_extadk.h"
 #include "NXAPI.h"
 #include "ContentInfo.h"
+#include "Trace.h"
 
-LPDIM g_lpDIM = NULL;
-LPSIM g_lpSIM = NULL;
+LPDIM g_lpDIM;
+LPSIM g_lpSIM;
 
 int ADK_SetLastError(DWORD dwError);
 NXLINTERFACE *g_pNxlInterface;
 
-#define NXLPATH "./libf_nxl.so"
+#define NXLPATH		"/usr/local/fasoo/libf_nxl.so"
+#define CP_ACP		0
+#define CP_UTF8		65001
+
 typedef PNXLINTERFACE(*_LPNXINITIALIZE)(void);
 
-wchar_t* ConvertCtoW(char* szInput)
+inline bool ChangeCharset(char *szSrcCharset, char *szDstCharset, char *szSrc, int nSrcLength, char *szDst, int* pnDstLength)
 {
-	const size_t iSize = strlen(szInput) + 1;
-	wchar_t* wcsOutput = new wchar_t[iSize];
-	mbstowcs(wcsOutput, szInput, iSize);
+	iconv_t it = iconv_open(szDstCharset, szSrcCharset);
+	if (it == (iconv_t)(-1))
+	{
+		return false;
+	}
+	bool result = true;
+	size_t nSrcStrLen = nSrcLength;
+	size_t cc = iconv(it, &szSrc, &nSrcStrLen, &szDst, (size_t*)pnDstLength);
+	if (cc == (size_t)(-1))
+	{
+		result = false;
+	}
 
-	return wcsOutput;
+	if (iconv_close(it) == -1)
+		result = false;
+	return result;
+};
+
+inline std::wstring mbs_to_wcs(std::string const& str,
+	std::locale const& loc = std::locale())
+{
+	std::wstring ret = L"";
+	unsigned long dwLen = str.length();
+	if (dwLen < 1)
+		return ret;
+
+	char* pcBuf = (char*)malloc((dwLen + 1) * sizeof(char));
+	strcpy(pcBuf, str.c_str());
+
+	char* pcOutBuf = (char*)malloc((dwLen + 1) * sizeof(wchar_t));
+	int iOut = (dwLen + 1) * sizeof(wchar_t);
+
+	char szSrcCharset[16] = "EUC-KR";
+	char szDstCharset[16] = "UTF-32LE";
+
+	if (ChangeCharset(szSrcCharset, szDstCharset, pcBuf, strlen(pcBuf), pcOutBuf, &iOut))
+	{
+		ret = (wchar_t*)pcOutBuf;
+	}
+
+	if (pcBuf != nullptr)
+		free(pcBuf);
+	if (pcOutBuf != nullptr)
+		free(pcOutBuf);
+
+	return ret;
+};
+
+unsigned short PurposeMapping(unsigned short wTmaxPurpose)
+{
+	unsigned short wADKPurpose;
+	switch (wTmaxPurpose)
+	{
+	case kDRMPurposeView:
+		wADKPurpose = ADK_PURPOSE_VIEW;
+		break;
+	case kDRMPurposeSave:
+		wADKPurpose = ADK_PURPOSE_SAVE;
+		break;
+	case kDRMPurposeEdit:
+		wADKPurpose = ADK_PURPOSE_EDIT;
+		break;
+	case kDRMPurposePrint:
+		wADKPurpose = ADK_PURPOSE_PRINT;
+		break;
+	case kDRMPurposePrintScreen:
+		wADKPurpose = ADK_PURPOSE_PRINT_SCREEN;
+		break;
+	case kDRMPurposeExtract:
+		wADKPurpose = ADK_PURPOSE_EXTRACT;
+		break;
+	case kDRMPurposeTransfer:
+		wADKPurpose = ADK_PURPOSE_TRANSFER;
+		break;
+	case kDRMPurposeSecureSave:
+		wADKPurpose = ADK_PURPOSE_SECURE_SAVE;
+		break;
+	case kDRMPurposeSecurePrint:
+		wADKPurpose = ADK_PURPOSE_SECURE_PRINT;
+		break;
+	case kDRMPurposeMacro:
+		wADKPurpose = ADK_PURPOSE_MACRO;
+		break;
+	}
+
+	return wADKPurpose;
 }
 
 void __attribute__((constructor))ADK_init(void)
 {
-	g_lpDIM = (LPDIM)malloc(sizeof(DIM));
-	g_lpSIM = (LPSIM)malloc(sizeof(SIM));
-
-	g_pNxlInterface = (PNXLINTERFACE)malloc(sizeof(NXLINTERFACE));
 }
 
 void __attribute__((destructor))ADK_fini(void)
 {
-	if (g_lpDIM)
-	{
-		free(g_lpDIM);
-	}
-
-	if (g_lpSIM)
-	{
-		free(g_lpSIM);
-	}
-
-	if (g_pNxlInterface)
-	{
-		free(g_pNxlInterface);
-	}
 }
 
 unsigned long get_Version()
 {
-	//Implementation
-	printf(" get_Version called!!..\n");
 	return 1;
 }
 
 unsigned int get_Authenticate(char *szFilePath)
 {
-	//Implementation
-	printf(" get_Authenticate called!!..\n");
 	return 1;
 }
 
-unsigned long set_NotifyMessage()
+unsigned long set_NotifyMessage(void* pContentInfo, const char* UTF8FilePath, TO_OFFICE_DRM_EventIDEnum ID, void* param1, void* param2)
 {
-	//Implementation
-	printf(" set_NotifyMessage called!!..\n");
+	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfo;
+
+	_FTRACEW(2, L"[set_NotifyMessage] Enter.. '%s' '%d'", lpContentInfo->pwcsFilePath, ID);
+
+	unsigned long dwPurpose = 0;
+	switch (ID)
+	{
+	case kDRMEventIDDocumentAfterOpen:
+		{
+			dwPurpose = ADK_PURPOSE_VIEW;
+			break;
+		}
+	case kDRMEventIDDocumentAfterSave:
+		{
+			dwPurpose = ADK_PURPOSE_SECURE_SAVE;
+			break;
+		}
+	}
+
+	_FTRACEW(2, L"[set_NotifyMessage] purpose '%ld'", dwPurpose);
+
+	if (0 != dwPurpose)
+		g_pNxlInterface->SetUsageEx(lpContentInfo, dwPurpose, TRUE, NULL, NULL, 0);
+
 	return 1;
 }
 
-unsigned int set_Menu(unsigned int uiMenuID)
-{
-	//Implementation
-	printf(" set_Menu called!!..\n");
+unsigned int set_Menu(void* pContentInfo, const char* szMenuID)
+{	
+	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfo;
+	
+	_FTRACEW(0, L"[set_Menu] called!!.. '%ls' '%s'", lpContentInfo->pwcsFilePath, szMenuID);
+	
+	if (!g_pNxlInterface->IsSecure(lpContentInfo))
+	{
+		_FTRACEA(2, "[_TO_OFFICE_DRM_PFN_setMenu] Is not secure file.");
+
+		return 1;
+	}
+
+	if (strcasecmp(szMenuID, "NEW_FILE") == 0 ||
+		strcasecmp(szMenuID, "OPEN_FILE") == 0 ||
+		strcasecmp(szMenuID, "CURRENT_FILE") == 0)
+	{
+		_FTRACEA(2, "[_TO_OFFICE_DRM_PFN_setMenu] Menus related to File View.");
+
+		return 1;
+	}
+	else if (strcasecmp(szMenuID, "SAVE_FILE") == 0 ||
+		strcasecmp(szMenuID, "SAVE_FILE_AS") == 0 ||
+		strcasecmp(szMenuID, "TH_SAVE_FILE") == 0 ||
+		strcasecmp(szMenuID, "TH_SAVE_FILE_AS") == 0 ||
+		strcasecmp(szMenuID, "TH_SAVE_FILE_AS_PDF") == 0 ||
+		strcasecmp(szMenuID, "TH_SAVE_INSERTED_PICTURE") == 0 ||
+		strcasecmp(szMenuID, "TH_DIALOG_SAVE_INSERTED_PICTURE") == 0)
+	{
+		_FTRACEA(2, "[_TO_OFFICE_DRM_PFN_setMenu] SECURE_SAVE invalid.");
+		
+		if (!g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_SECURE_SAVE))
+		{
+			return 0;
+		}
+	}
+	else if (strcasecmp(szMenuID, "MACRO_DIALOG_VBA_ITEM") == 0 ||
+		strcasecmp(szMenuID, "MACRO_DIALOG_JS_ITEM") == 0 ||
+		strcasecmp(szMenuID, "VBA_MACRO") == 0 ||
+		strcasecmp(szMenuID, "VBA_MACRO_VIEW") == 0 ||
+		strcasecmp(szMenuID, "VBA_MACRO_RUN") == 0)
+	{
+		if (!g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_MACRO))
+		{
+			_FTRACEA(2, "[_TO_OFFICE_DRM_PFN_setMenu] MACRO invalid.");
+
+			return 0;
+		}
+	}
+	else if (strcasecmp(szMenuID, "CONTEXTUAL_TAB_TH_PRINT_PREVIEW") == 0 ||
+		strcasecmp(szMenuID, "TM_MAIL_PRINT") == 0 ||
+		strcasecmp(szMenuID, "GROUP_PRINT_TH") == 0 ||
+		strcasecmp(szMenuID, "GROUP_PAGE_PRINT_TH") == 0 ||
+		strcasecmp(szMenuID, "GROUP_PREVIEW_PAGE_PRINT_TH") == 0 ||
+		strcasecmp(szMenuID, "PRINT") == 0 ||
+		strcasecmp(szMenuID, "PRINT_TO_DOCUMENT_ADD_BUTTON") == 0 ||
+		strcasecmp(szMenuID, "TW_DOCUMENT_PRINT") == 0 ||
+		strcasecmp(szMenuID, "TH_PRINT") == 0 ||
+		strcasecmp(szMenuID, "TH_PRINT_IN_PREVIEW") == 0)
+	{
+		if (!g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_MACRO))
+		{
+			_FTRACEA(2, "[_TO_OFFICE_DRM_PFN_setMenu] PRINT invalid.");
+
+			return 0;
+		}
+	}
+	else
+	{
+		if (!g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_EDIT))
+		{
+			_FTRACEA(2, "[_TO_OFFICE_DRM_PFN_setMenu] EDIT invalid.");
+
+			return 0;
+		}
+	}
+
 	return 1;
 }
 
 bool ADK_NxInitialize()
 {
-//	printf("[ADK_NxInitialize] Enter..\n");
+	_FTRACEA(2, "[ADK_NxInitialize] Enter..");
+	
 	static bool bNxlInitialized = false;
 	
 	if (!bNxlInitialized)
 	{
-		void* pDllHandle = NULL;
+		void* hDll = NULL;
 		
 		// https://www.joinc.co.kr/w/Site/C++/Documents/Dynamic_Class_Loading
 
-		pDllHandle = dlopen(NXLPATH, RTLD_LAZY);
-		if (!pDllHandle)
+		hDll = dlopen(NXLPATH, RTLD_LAZY);
+		if (!hDll)
 		{
-//			printf("dlopen failed..\n");
-			fputs(dlerror(), stderr);
-			printf("%s\n", dlerror());
-			
+			_FTRACEA(2, "[ADK_NxInitialize] dlopen failed. '%s'", dlerror());
+
 			return false;
 		}
 
-		_LPNXINITIALIZE pfnNxInitialize = (_LPNXINITIALIZE)dlsym(pDllHandle, "NxInitialize");
+		_LPNXINITIALIZE pfnNxInitialize = (_LPNXINITIALIZE)dlsym(hDll, "NxInitialize");
+		if (!pfnNxInitialize)
+		{
+			_FTRACEA(2, "[ADK_NxInitialize] dlsym failed. '%s'", dlerror());
+
+			return false;
+		}
 		
 		g_pNxlInterface = pfnNxInitialize();
 
@@ -110,88 +281,86 @@ bool ADK_NxInitialize()
 	return true;
 }
 
-int ADK_IsLicenseVaildByPath(char *szFilePath, int iPurpose)
+int ADK_IsLicenseVaildByPath(char *szFilePath, unsigned short wPurpose)
 {
-	printf("[ADK_IsLicenseVaildByPath] Enter..\n");
+	unsigned short wPurposeNew = PurposeMapping(wPurpose);
+
+	_FTRACEA(2, "[ADK_IsLicenseVaildByPath] Enter.. '%s' '%d' -> '%d'", szFilePath, wPurpose, wPurposeNew);
 
 	if (NULL == szFilePath || '\0' == szFilePath[0])
 	{
-		printf("[ADK_IsLicenseVaildByPath] Invalid param.\n");
+		_FTRACEA(2, "[ADK_IsLicenseVaildByPath] Invalid param.");
 
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
+		ADK_SetLastError(kDRMErrorInvalidArgs);
 
 		return 0;
 	}
 
 	if (!ADK_NxInitialize())
 	{
-		printf("[ADK_IsLicenseVaildByPath] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_IsLicenseVaildByPath] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);	
+		ADK_SetLastError(kDRMErrorModuleInitFail);	
 	
 		return 0;
 	}
-
+	
 	FILE* fp = fopen(szFilePath, "r");
 	if (NULL == fp)
 	{
-		printf("[ADK_IsLicenseVaildByPath] File open failed.\n");
+		_FTRACEA(2, "[ADK_IsLicenseVaildByPath] File open failed. '%s'", strerror(errno));
 
-		ADK_SetLastError(E_ADK_WIN32_CREATEFILE_FAIL);
-
-		return 0;
-	}
-
-	wchar_t* wcsFilePath = ConvertCtoW(szFilePath);
-	if (NULL == wcsFilePath || '\0' == wcsFilePath[0])
-	{
-		printf("[ADK_IsLicenseVaildByPath] Convert fail.\n");
-
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
+		ADK_SetLastError(kDRMErrorCreateFileFail);
 
 		return 0;
 	}
+
+	std::wstring wstrFilePath = mbs_to_wcs(szFilePath);
+	wchar_t* wcsFilePath = (wchar_t*)malloc((wstrFilePath.length() + 1) * sizeof(wchar_t));
+	wcscpy(wcsFilePath, wstrFilePath.c_str());
 
 	LPCONTENTINFO lpContentInfo = g_pNxlInterface->OpenContentByHandle(fp, wcsFilePath, TRUE, FALSE, FALSE);
 	if (NULL == lpContentInfo)
 	{
-		printf("[ADK_IsLicenseValidByPath] OpenContent failed.\n");
+		_FTRACEA(2, "[ADK_IsLicenseVaildByPath] OpenContentByHandle failed.");
 
-		ADK_SetLastError(E_ADK_CONTENT_OPEN_FAIL);
+		ADK_SetLastError(kDRMErrorContentOpenFail);
 	
 		fclose(fp);
+		free(wcsFilePath);
 
 		return 0;
 	}
+	free(wcsFilePath);
 
 	if (!g_pNxlInterface->IsSecure(lpContentInfo))
 	{
-		printf("[ADK_IsLicenseValidByPath] Not secure content.\n");
+		_FTRACEA(2, "[ADK_IsLicenseVaildByPath] Not secure file.");
 
 		g_pNxlInterface->CloseContentInfo(lpContentInfo);
 
-		ADK_SetLastError(E_ADK_NOT_SECURE_CONTENT);
+		ADK_SetLastError(kDRMErrorNotSecureFile);
 
 		fclose(fp);
 
-		return 0;
+		return 1;
 	}
 
-	bool bRet = g_pNxlInterface->IsLicenseValid(lpContentInfo, iPurpose);
+	bool bRet = g_pNxlInterface->IsLicenseValid(lpContentInfo, wPurposeNew);
 	if (!bRet)
 	{
-		printf("[ADK_IsLicenseValidByPath] License invalid.\n");
+		_FTRACEA(2, "[ADK_IsLicenseVaildByPath] License invalid.");
 
-		ADK_SetLastError(E_ADK_CONTENT_INVALID_LICENSE);
+		ADK_SetLastError(kDRMErrorContentInvalidLicense);
 
 		fclose(fp);
 
 		return 0;
 	}
 
-	printf("[ADK_IsLicenseValidByPath] License valid. '%s'\n", szFilePath);
+	_FTRACEA(2, "[ADK_IsLicenseVaildByPath] License valid.");
 	
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
  	fclose(fp);
 
@@ -200,24 +369,22 @@ int ADK_IsLicenseVaildByPath(char *szFilePath, int iPurpose)
 
 int ADK_IsSecureContentByPath(char *szFilePath)
 {
-	printf("[ADK_IsSecureContentByPath] Enter..\n");
+	_FTRACEA(2, "[ADK_IsSecureContentByPath] Enter.. '%s'", szFilePath);
 
 	if (NULL == szFilePath || '\0' == szFilePath[0])
 	{
-		printf("[ADK_IsSecureContentByPath] Invalid param.\n");
+		_FTRACEA(2, "[ADK_IsSecureContentByPath] Invalid param.");
 
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
+		ADK_SetLastError(kDRMErrorInvalidArgs);
 
 		return 0;
 	}
 
-	printf("[ADK_IsSecureContentByPath] '%s'\n", szFilePath);
-
 	if (!ADK_NxInitialize())
 	{
-		printf("[ADK_IsSecureContentByPath] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_IsSecureContentByPath] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
@@ -225,152 +392,161 @@ int ADK_IsSecureContentByPath(char *szFilePath)
 	FILE* fp = fopen(szFilePath, "r");
 	if (NULL == fp)
 	{
-		printf("[ADK_IsSecureContentByPath] File open failed.\n");
+		_FTRACEA(2, "[ADK_IsSecureContentByPath] File open failed. '%s'", strerror(errno));
 
-		ADK_SetLastError(E_ADK_WIN32_CREATEFILE_FAIL);
+		ADK_SetLastError(kDRMErrorCreateFileFail);
 
 		return 0;
 	}
 	
 	if (!g_pNxlInterface->IsSecureFileByHandle(fp))
 	{
-		printf("[ADK_IsSecureContentByPath] Not secure file.\n");
+		_FTRACEA(2, "[ADK_IsSecureContentByPath] Not secure file.");
 
-		ADK_SetLastError(E_ADK_NOT_SECURE_CONTENT);
+		ADK_SetLastError(kDRMErrorOK);
 
 		fclose(fp);
 
 		return 0;
 	}
 
-	printf("[ADK_IsSecureContentByPath] Secure file. '%s'\n", szFilePath);
+	_FTRACEA(2, "[ExtADK][ADK_IsSecureContentByPath] Secure file.");
 	
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
 	fclose(fp);
 
 	return 1;
 }
 
-// TODO::
 int ADK_GetDomainIdByPath(char *szFilePath, char *szDomainID, int iBufferSize)
 {
-	printf("[ADK_GetDomainIdByPath] Enter..");
-
-/*	if (NULL == szFilePath || "")*/
-
 	return 1;
 }
 
-void* ADK_OpenContent(char *szFilePath, int iWritable, int iTruncate)
+void* ADK_OpenContent(char *szFilePath, char *szFileMode, bool bWritable, bool bTruncate)
 {
-	printf("[ADK_OpenContent] Enter..\n");
+	_FTRACEA(2, "[ADK_OpenContent] Enter.. '%s' '%s' '%d' '%d'", szFilePath, szFileMode, bWritable, bTruncate);
 
 	if (NULL == szFilePath || '\0' == szFilePath[0])
 	{
-		printf("[ADK_OpenContent] Invalid param.\n");
+		_FTRACEA(2, "[ADK_OpenContent] Invalid param.");
 
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
+		ADK_SetLastError(kDRMErrorInvalidArgs);
 
 		return NULL;
 	}
-		
+
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_OpenContent] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_OpenContent] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
-		return 0;
+		return NULL;
+	}
+
+	std::wstring wstrFilePath = mbs_to_wcs(szFilePath);
+	wchar_t* wcsFilePath = (wchar_t*)malloc((wstrFilePath.length() + 1) * sizeof(wchar_t));
+	wcscpy(wcsFilePath, wstrFilePath.c_str());
+
+	LPCONTENTINFO lpContentInfoOld = NULL;
+	FILE* fpOld = NULL;
+	if (bTruncate)
+	{	
+		_FTRACEA(2, "[ADK_OpenContent] Truncate file. call OpenCotentByHandle.");
+		fpOld = fopen(szFilePath, "r+");
+		if (NULL != fpOld)
+		{
+			lpContentInfoOld = g_pNxlInterface->OpenContentByHandle(fpOld, wcsFilePath, true, false, false);
+			fclose(fpOld);
+		}
+	}
+
+	char szFileModeTemp[10] = { 0 };
+	strcpy(szFileModeTemp, szFileMode);
+
+	if (strstr(szFileModeTemp, "w") != NULL ||
+		strstr(szFileModeTemp, "W") != NULL)
+	{
+		if (strstr(szFileModeTemp, "+") == NULL)
+		{
+			strcat(szFileModeTemp, "+");
+		}
 	}
 
 	FILE* fp;
-	if (0 == iWritable)
-	{
-		fp = fopen(szFilePath, "r");
-	}
-	else
-	{
-		if (0 == iTruncate)
-		{
-			fp = fopen(szFilePath, "r+");
-		}
-		else
-		{
-			// ÆÄÀÏÀ» »õ·Î »ý¼ºÇÏ¸ç, ÀÌ¹Ì ÆÄÀÏÀÌ Á¸ÀçÇÒ °æ¿ì ÆÄÀÏÀÇ ³»¿ëÀ» ¸ðµÎ »èÁ¦ÇÏ°í ¿¬´Ù.
-			fp = fopen(szFilePath, "w+");
-		}
-	}
-
+	fp = fopen(szFilePath, szFileModeTemp);
 	if (NULL == fp)
 	{
-		printf("[ADK_OpenContent] File open failed.\n");
+		_FTRACEA(2, "[ADK_OpenContent] File open failed. '%s'", strerror(errno));
 
-		ADK_SetLastError(E_ADK_WIN32_CREATEFILE_FAIL);
+		ADK_SetLastError(kDRMErrorCreateFileFail);
+
+		free(wcsFilePath);
 
 		return 0;
 	}
 
-	wchar_t* wcsFilePath = ConvertCtoW(szFilePath);
-	if (NULL == wcsFilePath || '\0' == wcsFilePath[0])
+	if (g_pNxlInterface->IsSecure(lpContentInfoOld))
 	{
-		printf("[ADK_OpenContent] Convert fail.\n");
+		_FTRACEA(2, "[ADK_OpenContent] Truncate file. call PackByHandleTemplate.");
 
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
+		g_pNxlInterface->PackByHandleTemplate(fp, wcsFilePath, lpContentInfoOld);
 
-		return 0;
+		g_pNxlInterface->CloseContentInfo(lpContentInfoOld);
 	}
 
 	LPCONTENTINFO lpContentInfo = g_pNxlInterface->OpenContentByHandle(fp, wcsFilePath, true, false, false);
 	if (NULL == lpContentInfo)
 	{
-		printf("[ADK_OpenContent] OpenContent failed.\n");
+		_FTRACEA(2, "[ADK_OpenContent] OpenContentByHandle failed.");
 
-		ADK_SetLastError(E_ADK_CONTENT_OPEN_FAIL);
+		ADK_SetLastError(kDRMErrorContentOpenFail);
 
 		fclose(fp);
+		free(wcsFilePath);
 
 		return NULL;
 	}
+	free(wcsFilePath);
 
 	if (!g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_VIEW))
 	{
-		printf("[ADK_OpenContent] VIEW license invalid.\n");
+		_FTRACEA(2, "[ADK_OpenContent] VIEW license invalid.");
 
-		ADK_SetLastError(E_ADK_CONTENT_INVALID_LICENSE);
+		ADK_SetLastError(kDRMErrorContentInvalidLicense);
 
 		fclose(fp);
 
 		return NULL;
 	}
 
-	if (1 == iWritable && !g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_SECURE_SAVE))
+	if ((bWritable || bTruncate) && !g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_SECURE_SAVE))
 	{
-		printf("[ADK_OpenContent] SECURE_SAVE license invalid.\n");
+		_FTRACEA(2, "[ADK_OpenContent] SECURE_SAVE license invalid.");
 
-		ADK_SetLastError(E_ADK_CONTENT_INVALID_LICENSE);
+		ADK_SetLastError(kDRMErrorContentInvalidLicense);
 
 		fclose(fp);
 
 		return NULL;
 	}
 
-	printf("[ADK_OpenContent] OpenContent success. '%s'\n", szFilePath);
-
-	ADK_SetLastError(E_ADK_OK);
+	_FTRACEA(2, "[ADK_OpenContent] OpenContent success.");
 
 	return (void *)lpContentInfo;
 }
 
 int ADK_IsSecureContent(void *pContentInfo)
 {
-	printf("[ADK_IsSecureContent] Enter..\n");
+	_FTRACEA(2, "[ADK_IsSecureContent] Enter..");
 
 	if (NULL == pContentInfo)
 	{
-		printf("[ADK_IsSecureContent] Invalid param.\n");
+		_FTRACEA(2, "[ADK_IsSecureContent] Invalid param.");
 
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
+		ADK_SetLastError(kDRMErrorInvalidArgs);
 
 		return 0;
 	}
@@ -379,9 +555,9 @@ int ADK_IsSecureContent(void *pContentInfo)
 	
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_IsSecureContent] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_IsSecureContent] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
@@ -389,29 +565,31 @@ int ADK_IsSecureContent(void *pContentInfo)
 	bool bSecure = g_pNxlInterface->IsSecure(lpContentInfo);
 	if (!bSecure)
 	{
-		printf("[ADK_IsSecureContent] Not secure content.\n");
+		_FTRACEA(2, "[ADK_IsSecureContent] Not secure content.");
 
-		ADK_SetLastError(E_ADK_NOT_SECURE_CONTENT);
+		ADK_SetLastError(kDRMErrorNotSecureFile);
 
 		return 0;
 	}
 
-	printf("[ADK_IsSecureContent] Secure content.\n");
+	_FTRACEA(2, "[ADK_IsSecureContent] Secure content.");
 
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
 	return 1;
 }
 
-int ADK_IsLicenseValid(void *pContentInfo, WORD wPurpose)
+int ADK_IsLicenseValid(void *pContentInfo, unsigned short wPurpose)
 {
-	printf("[ADK_IsLicenseValid] Enter..\n");
+	unsigned short wPurposeNew = PurposeMapping(wPurpose);
 
+	_FTRACEA(2, "[ADK_IsLicenseValid] Enter.. '%d' -> '%d'", wPurpose, wPurposeNew);
+	
 	if (NULL == pContentInfo)
 	{
-		printf("[ADK_IsLicenseValid] Invalid param.\n");
+		_FTRACEA(2, "[ADK_IsLicenseValid] Invalid param.");
 
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
+		ADK_SetLastError(kDRMErrorInvalidArgs);
 
 		return 0;
 	}
@@ -420,41 +598,41 @@ int ADK_IsLicenseValid(void *pContentInfo, WORD wPurpose)
 
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_IsLicenseValid] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_IsLicenseValid] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
 
-	bool bRet = g_pNxlInterface->IsLicenseValid(lpContentInfo, wPurpose);
+	bool bRet = g_pNxlInterface->IsLicenseValid(lpContentInfo, wPurposeNew);
 	if (!bRet)
 	{
-		printf("[ADK_IsLicenseValid] License invalid.\n");
+		_FTRACEA(2, "[ADK_IsLicenseValid] License invalid.");
 
-		ADK_SetLastError(E_ADK_CONTENT_INVALID_LICENSE);
+		ADK_SetLastError(kDRMErrorContentInvalidLicense);
 
 		return 0;
 	}
 
-	printf("[ADK_IsLicenseValid] License valid.\n");
+	_FTRACEA(2, "[ADK_IsLicenseValid] License valid.");
 
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
 	return 1;
 }
 
 int ADK_SetContentPointer(void *pContentInfo, long lOffset, int iOrigin)
 {
-	printf("[ADK_SetContentPointer] Enter..\n");
+	_FTRACEA(2, "[ADK_SetContentPointer] SetContentPointer Enter.. '%ld' '%d'", lOffset, iOrigin);
 
 	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfo;
 
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_SetContentPointer] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_SetContentPointer] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
@@ -462,32 +640,31 @@ int ADK_SetContentPointer(void *pContentInfo, long lOffset, int iOrigin)
 	int ibRet = g_pNxlInterface->SetContentPointer(lpContentInfo, lOffset, NULL, iOrigin);
 	if (ibRet == -1) // INVALID_SET_CONTENTPOINTER
 	{
-		printf("[ADK_SetContentPointer] SetContentPointer failed.\n");
+		_FTRACEA(2, "[ADK_SetContentPointer] SetContentPointer failed.");
 
-		ADK_SetLastError(E_ADK_CONTENT_SET_POINTER_FAIL);
+		ADK_SetLastError(kDRMErrorContentSetPointerFail);
 
 		return 0;
 	}
 
-	printf("[ADK_SetContentPointer] SetContentPointer success.\n");
+	_FTRACEA(2, "[ADK_SetContentPointer] SetContentPointer success.");
 
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
 	return 1;
 }
 
-// TODO::¿©±â¼­ºÎÅÍ defineµÈ °ªÀ¸·Î º¯°æ. À§¿¡ º¯°æ ÇÊ¿ä
 int ADK_ReadContent(void *pContentInfo, void* pBuffer, unsigned long dwNumberOfBytesToRead, unsigned long* lpdwNumberOfBytesToRead)
 {
-	printf("[ADK_ReadContent] Enter..\n");
+	_FTRACEA(2, "[ADK_ReadContent] Enter.. '%ld'", dwNumberOfBytesToRead);
 
 	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfo;
-
+		
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_ReadContent] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_ReadContent] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
@@ -495,31 +672,31 @@ int ADK_ReadContent(void *pContentInfo, void* pBuffer, unsigned long dwNumberOfB
 	bool bRet = g_pNxlInterface->ReadContent(lpContentInfo, pBuffer, dwNumberOfBytesToRead, lpdwNumberOfBytesToRead);
 	if (!bRet)
 	{
-		printf("[ADK_ReadContent] ReadContent failed.\n");
+		_FTRACEA(2, "[ADK_ReadContent] ReadContent failed.");
 
-		ADK_SetLastError(E_ADK_CONTENT_READ_FAIL);
+		ADK_SetLastError(kDRMErrorContentReadFail);
 
 		return 0;
 	}
-	
-	printf("[ADK_ReadContent] ReadContent success.\n");
 
-	ADK_SetLastError(E_ADK_OK);
+	_FTRACEA(2, "[ADK_ReadContent] ReadContent success");
+
+	ADK_SetLastError(kDRMErrorOK);
 
 	return 1;
 }
 
 int ADK_WriteContent(void *pContentInfo, void* pBuffer, unsigned long dwNumberOfBytesToWrite, unsigned long* lpdwNumberOfBytesToWrite)
 {
-	printf("[ADK_WriteContent] Enter..\n");
+	_FTRACEA(2, "[ADK_WriteContent] Enter.. '%ld'", dwNumberOfBytesToWrite);
 
 	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfo;
 
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_WriteContent] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_WriteContent] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
@@ -527,31 +704,31 @@ int ADK_WriteContent(void *pContentInfo, void* pBuffer, unsigned long dwNumberOf
 	bool bRet = g_pNxlInterface->WriteContent(lpContentInfo, pBuffer, dwNumberOfBytesToWrite, lpdwNumberOfBytesToWrite);
 	if (!bRet)
 	{
-		printf("[ADK_WriteContent] WriteContent failed.\n");
+		_FTRACEA(2, "[ADK_WriteContent] WriteContent failed.");
 
-		ADK_SetLastError(E_ADK_CONTENT_WRITE_FAIL);
+		ADK_SetLastError(kDRMErrorContentWriteFail);
 
 		return 0;
 	}
 
-	printf("[ADK_WriteContent] WriteContent success.\n");
+	_FTRACEA(2, "[ADK_WriteContent] WriteContent success.");
 
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
 	return 1;
 }
 
 int ADK_SetEndOfContent(void *pContentInfo)
 {
-	printf("[ADK_SetEndOfContent] Enter..\n");
+	_FTRACEA(2, "[ADK_SetEndOfContent] Enter..");
 
 	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfo;
 
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_SetEndOfContent] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_SetEndOfContent] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
@@ -559,34 +736,36 @@ int ADK_SetEndOfContent(void *pContentInfo)
 	bool bRet = g_pNxlInterface->SetEndOfContent(lpContentInfo);
 	if (!bRet)
 	{
-		printf("[ADK_SetEndOfContent] SetEndOfContent failed.\n");
+		_FTRACEA(2, "[ADK_SetEndOfContent] SetEndOfContent failed.");
 
-		ADK_SetLastError(E_ADK_CONTENT_SET_POINTER_FAIL);
+		ADK_SetLastError(kDRMErrorContentSetPointerFail);
 
 		return 0;
 	}
 
-	printf("[ADK_SetEndOfContent] SetEndofContent success.\n");
+	_FTRACEA(2, "[ADK_SetEndOfContent] SetEndOfContent success.");
 
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
 	return 1;
 }
 
 int ADK_CloseContent(void *pContentInfo)
 {
-	printf("[ADK_CloseContent] Enter..\n");
+	_FTRACEA(2, "[ADK_CloseContent] Enter..");
 
 	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfo;
 
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_CloseContent] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_CloseContent] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
+
+	_FTRACEA(2, "[ADK_CloseContent] hFile '0x%x'", lpContentInfo->hFile);
 
 	FILE* fp = lpContentInfo->hFile;
 	g_pNxlInterface->CloseContentInfo(lpContentInfo);
@@ -596,9 +775,9 @@ int ADK_CloseContent(void *pContentInfo)
 		fclose(fp);
 	}
 
-	printf("[ADK_CloseContent] CloseContentInfo success.\n");
+	_FTRACEA(2, "[ADK_CloseContent] CloseContentInfo success.");
 
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
 	return 1;
 }
@@ -610,40 +789,40 @@ DWORD ADK_GetLastError()
 
 int ADK_SetLastError(unsigned long dwError)
 {
-	g_dwTlsError = dwError;
+	LASTERROR = dwError;
 
 	return 1;
 }
 
 DWORD ADK_GetDomainId(void *pContentInfo, char *szDomainID, unsigned int cchDomainId)
 {
-	printf("[ADK_GetDomainId] Enter..\n");
+	_FTRACEA(2, "[ADK_GetDomainId] Enter.. '%s, '%d'", szDomainID, cchDomainId);
 
 	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfo;
 
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_GetDomainId] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_GetDomainId] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
 
 	if (!g_pNxlInterface->IsSecure(lpContentInfo))
 	{
-		printf("[ADK_GetDomainId] Not secure content.\n");
+		_FTRACEA(2, "[ADK_GetDomainId] Not secure content.");
 
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
+		ADK_SetLastError(kDRMErrorInvalidArgs);
 
 		return 0;
 	}
 
 	if (NULL == lpContentInfo->lpContentLicense)
 	{
-		printf("[ADK_GetDomainId] Can't get domainID. lpContentLicense is NULL.\n");
+		_FTRACEA(2, "[ADK_GetDomainId] Can't get domainID. lpContentLicense is NULL.");
 
-		ADK_SetLastError(E_ADK_GENERAL);
+		ADK_SetLastError(kDRMErrorGeneral);
 
 		return 0;
 	}
@@ -652,7 +831,7 @@ DWORD ADK_GetDomainId(void *pContentInfo, char *szDomainID, unsigned int cchDoma
 
 	if (NULL == pwcsDomainIdFromContent)
 	{
-		printf("[ADK_GetDomainId] Can't get domainID. GetCPID failed.\n");
+		_FTRACEA(2, "[ADK_GetDomainId] Can't get domainID. GetCPID failed.");
 
 		ADK_SetLastError(E_ADK_INTERNAL_NXL_GET_DOMAINID_FAIL);
 
@@ -661,42 +840,42 @@ DWORD ADK_GetDomainId(void *pContentInfo, char *szDomainID, unsigned int cchDoma
 
 	unsigned long dwLength;
 
-	printf("[ADK_GetDomainId] GetDomainId success.\n");
+	_FTRACEA(2, "[ADK_GetDomainId] GetDomainId success.");
 
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
 	return dwLength;
 }
 
-// FSN¸¸ Áö¿øÇÏ¹Ç·Î GetContentTypeÀº ¿À·ÎÁö FSN¸¸ ¸®ÅÏ
+// FSNë§Œ ì§€ì›í•˜ë¯€ë¡œ GetContentTypeì€ ì˜¤ë¡œì§€ FSNë§Œ ë¦¬í„´
 int ADK_GetContentType(void *pContentInfo)
 {
-	printf("[ADK_GetContentType] Enter..");
+	_FTRACEA(2, "[ADK_GetContentType] Enter.."); 
 
 	return 3;	// ADK_CONTENT_FSN
 }
 
 int ADK_PackContent(void *pContentInfoTarget, void *pContentInfoTemplate)
 {
-	printf("[ADK_PackContent] Enter..\n");
+	_FTRACEA(2, "[ADK_PackContent] Enter..");
 
 	LPCONTENTINFO lpContentInfoTarget = (LPCONTENTINFO)pContentInfoTarget;
 	LPCONTENTINFO lpContentInfoTemplate = (LPCONTENTINFO)pContentInfoTemplate;
-
+	
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_PackContent] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_PackContent] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
 
 	if (!g_pNxlInterface->IsSecure(lpContentInfoTemplate))
 	{
-		printf("[ADK_PackContent] Not secure file.\n");
+		_FTRACEA(2, "[ADK_PackContent] Not secure template.");
 
-		ADK_SetLastError(E_ADK_NOT_SECURE_CONTENT);
+		ADK_SetLastError(kDRMErrorNotSecureFile);
 
 		return 0;
 	}
@@ -704,47 +883,47 @@ int ADK_PackContent(void *pContentInfoTarget, void *pContentInfoTemplate)
 	if (!g_pNxlInterface->IsLicenseValid(lpContentInfoTemplate, ADK_PURPOSE_VIEW) ||
 		!g_pNxlInterface->IsLicenseValid(lpContentInfoTemplate, ADK_PURPOSE_SECURE_SAVE))
 	{
-		printf("[ADK_PackContent] License invalid.\n");
+		_FTRACEA(2, "[ADK_PackContent] License invalid.");
 
-		ADK_SetLastError(E_ADK_CONTENT_INVALID_LICENSE);
+		ADK_SetLastError(kDRMErrorContentInvalidLicense);
 
 		return 0;
 	}
 
 	if (!g_pNxlInterface->PackByHandleTemplate(lpContentInfoTarget->hFile, lpContentInfoTarget->pwcsFilePath, lpContentInfoTemplate))
 	{
-		printf("[ADK_PackContent] PackByHandleTemplate failed.\n");
+		_FTRACEA(2, "[ADK_PackContent] PackByHandleTemplate failed.");
 
 		ADK_SetLastError(E_ADK_CONTENT_PACK_FAIL);
 
 		return 0;
 	}
 
-	printf("[ADK_PackContent] PackByHandleTemplate success.\n");
+	_FTRACEA(2, "[ADK_PackContent] PackByHandleTemplate success.");
 
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
 	return 1;
 }
 
 int ADK_AutoPackContent(char *szFilePath)
 {
-	printf("[ADK_AutoPackContent] Enter..\n");
+	_FTRACEA(2, "[ADK_AutoPackContent] Enter.. '%s'", szFilePath);
 
 	if (NULL == szFilePath || '\0' == szFilePath[0])
 	{
-		printf("[ADK_AutoPackContent] Invalid param.\n");
+		_FTRACEA(2, "[ADK_AutoPackContent] Invalid param.");
 
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
+		ADK_SetLastError(kDRMErrorInvalidArgs);
 
 		return 0;
 	}
 
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_AutoPackContent] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_AutoPackContent] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
@@ -752,71 +931,69 @@ int ADK_AutoPackContent(char *szFilePath)
 	FILE* fp = fopen(szFilePath, "r+");
 	if (NULL == fp)
 	{
-		printf("[ADK_AutoPackContent] File open failed.\n");
+		_FTRACEA(2, "[ADK_AutoPackContent] File open failed. '%s'", strerror(errno));
 
-		ADK_SetLastError(E_ADK_WIN32_CREATEFILE_FAIL);
-
-		return 0;
-	}
-
-	wchar_t* wcsFilePath = ConvertCtoW(szFilePath);
-	if (NULL == wcsFilePath || '\0' == wcsFilePath[0])
-	{
-		printf("[ADK_AutoPackContent] Convert fail.\n");
-
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
+		ADK_SetLastError(kDRMErrorCreateFileFail);
 
 		return 0;
 	}
+
+	std::wstring wstrFilePath = mbs_to_wcs(szFilePath);
+	wchar_t* wcsFilePath = (wchar_t*)malloc((wstrFilePath.length() + 1) * sizeof(wchar_t));
+	wcscpy(wcsFilePath, wstrFilePath.c_str());
 	
 	if (!g_pNxlInterface->PackByHandle(fp, wcsFilePath, NULL))
 	{
-		printf("[ADK_AutoPackContent] PackByHandle failed.\n");
+		_FTRACEA(2, "[ADK_AutoPackContent] PackByHandle failed.");
 
 		ADK_SetLastError(E_ADK_CONTENT_PACK_FAIL);
 
 		fclose(fp);
 
+		free(wcsFilePath);
+
 		return 0;
 	}
 
-	printf("[ADK_AutoPackContent] PackByHandle success.\n");
+	_FTRACEA(2, "[ADK_AutoPackContent] PackByHandle success.");
 
-	ADK_SetLastError(E_ADK_OK);
+	ADK_SetLastError(kDRMErrorOK);
 
 	fclose(fp);
+
+	free(wcsFilePath);
 
 	return 1;
 }
 
 int ADK_SetUsage(void *pContentInfoTarget, unsigned short wPurpose)
 {
-	printf("[ADK_SetUsage] Enter..\n");
+	_FTRACEA(2, "[ADK_SetUsage] Enter..");
 
 	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfoTarget;
 
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_SetUsage] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_SetUsage] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
 
-// 	bool bRet = g_pNxlInterface->SetUsage(lpContentInfo, wPurpose, FALSE);
-// 	if (!bRet)
-// 	{
-// 		printf("[ADK_SetUsage] SetUsage failed.\n");
-// 
-// 		ADK_SetLastError(E_ADK_GENERAL);
-// 
-// 		return 0;
-// 	}
+	bool bRet = g_pNxlInterface->SetUsageEx(lpContentInfo, wPurpose, TRUE, NULL, NULL, 0);
+	if (!bRet)
+	{
+		_FTRACEA(2, "[ADK_SetUsage] SetUsage failed.");
 
-	printf("[ADK_SetUsage] SetUsage success.\n");
+		ADK_SetLastError(kDRMErrorGeneral);
 
-	ADK_SetLastError(E_ADK_OK);
+		return 0;
+	}
+
+	_FTRACEA(2, "[ADK_SetUsage] SetUsage success.");
+
+	ADK_SetLastError(kDRMErrorOK);
 
 	return 1;
 }
@@ -829,7 +1006,7 @@ int ADK_IsLogonStatus(char *szDomainID)
 	{
 		printf("[ADK_IsLogonStatus] NxInitialize failed.\n");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
@@ -839,16 +1016,6 @@ int ADK_IsLogonStatus(char *szDomainID)
 // 		bool bLogin = g_pNxlInterface->GetLoginStatus();
 // 
 // 		return bLogin;
-	}
-
-	wchar_t* wcsDomainID = ConvertCtoW(szDomainID);
-	if (NULL == wcsDomainID || '\0' == wcsDomainID[0])
-	{
-		printf("[ADK_IsLogonStatus] Convert fail.\n");
-
-		ADK_SetLastError(E_ADK_INVALID_ARGS);
-
-		return 0;
 	}
 
 	char *szStatus = NULL;
@@ -861,42 +1028,37 @@ int ADK_IsLogonStatus(char *szDomainID)
 	{
 		printf("[ADK_IsLogonStatus] Logon status.\n");
 
-		ADK_SetLastError(E_ADK_OK);
+		ADK_SetLastError(kDRMErrorOK);
 
 		return 1;
 	}
 	
 	printf("[ADK_IsLogonStatus] Not logon status.\n");
 
-	ADK_SetLastError(E_ADK_GENERAL);
+	ADK_SetLastError(kDRMErrorGeneral);
 
 	return 0;
 }
 
 unsigned long ADK_GetContentSize(void *pContentInfo)
 {
-	printf("[ADK_GetContentSize] Enter..\n");
+	_FTRACEA(2, "[ADK_GetContentSize] Enter..");
 
 	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfo;
-
+	
 	if (ADK_NxInitialize() == 0)
 	{
-		printf("[ADK_GetContentSize] NxInitialize failed.\n");
+		_FTRACEA(2, "[ADK_GetContentSize] NxInitialize failed.");
 
-		ADK_SetLastError(E_ADK_NXL_INIT_FAIL);
+		ADK_SetLastError(kDRMErrorModuleInitFail);
 
 		return 0;
 	}
 
 	unsigned long dwContentSize;
-	if (g_pNxlInterface->IsSecure(lpContentInfo))
-	{
-		dwContentSize = g_pNxlInterface->GetEncryptedContentSize(lpContentInfo, NULL);
-	}
-	else
-	{
-		dwContentSize = g_pNxlInterface->GetOriginalContentSize(lpContentInfo, NULL);
-	}
+	dwContentSize = g_pNxlInterface->GetOriginalContentSize(lpContentInfo, NULL);
+
+	_FTRACEA(2, "[ADK_GetContentSize] size '%lu'", dwContentSize);
 
 	return dwContentSize;
 }
@@ -904,6 +1066,16 @@ unsigned long ADK_GetContentSize(void *pContentInfo)
 #pragma GCC visibility push(default)
 int DRMInterfaceInitialize(void **ppDocumentInterface, void **ppSystemInterface, void *pOSInformation, void* pOfficeInformation)
 {
+	_FTRACEA(2, "[DRMInterfaceInitialize] Enter..");
+
+	g_lpDIM = (LPDIM)malloc(sizeof(DIM));
+	g_lpSIM = (LPSIM)malloc(sizeof(SIM));
+
+	g_pNxlInterface = (PNXLINTERFACE)malloc(sizeof(NXLINTERFACE));
+
+	if (!_FTraceInit("f_extadk", NULL))
+		printf("[ExtADK] TraceInit failed.\n");
+
 	g_lpDIM->pfngetVersion = get_Version;
 	g_lpDIM->pfngetAuthenticate = get_Authenticate;
 	g_lpDIM->pfnsetNotifyMessage = set_NotifyMessage;
