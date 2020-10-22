@@ -1,6 +1,4 @@
-#include <stdio.h>
-#include <strings.h>
-#include <pthread.h>
+#include "DRMUtil.h"
 
 ///////////////// TYPEDEF DATA TYPE & STRUCT
 typedef unsigned char					BYTE;
@@ -30,52 +28,28 @@ enum ADK_PURPOSE
 	ADK_PURPOSE_TRANSFER				= 10,
 	ADK_PURPOSE_SECURE_SAVE				= 12,
 	ADK_PURPOSE_SECURE_PRINT			= 13,
+	ADK_PURPOSE_MACRO					= 20,
 };
 
 enum ADK_ERROR
 {
-	E_ADK_OK							= 0x0,
-	E_ADK_LOAD_NXL_FAIL					= 0x1,
-	E_ADK_NXL_INIT_FAIL					= 0x2,
-	E_ADK_WIN32_CREATEFILE_FAIL			= 0x3,
-	E_ADK_INVALID_ARGS					= 0x4,
-	E_ADK_ALREADY_PRINTING				= 0x5,
-	E_ADK_PRINTING_NOT_STARTED			= 0x6,
-	E_ADK_MEMORY_ERROR					= 0x7,
-	E_ADK_INSUFFICIENT_BUFFER			= 0x8,
-	E_ADK_CONVERSION_FAIL				= 0x9,
+	E_ADK_OK							= 0x0,		// 성공
+	E_ADK_LOAD_NXL_FAIL					= 0x1,		// NXL 모듈 로드 실패
+	E_ADK_NXL_INIT_FAIL					= 0x2,		// NXL 모듈 초기화 실패
+	E_ADK_WIN32_CREATEFILE_FAIL			= 0x3,		// fppen 실패
+	E_ADK_INVALID_ARGS					= 0x4,		// 유효하지 않은 파라미터
 
-	E_ADK_DRM_CLIENT_NOT_FOUND			= 0xD,
-
-	E_ADK_NOT_SECURE_CONTENT			= 0xFF,
-
-	E_ADK_CERT_START					= 0x100,
-	E_ADK_CERT_NOT_ALLOWED_CONTENT		= 0x101,	// 사용하려는 파일이 fac 파일로부터 인증되지 않음.
-
-	E_ADK_FAC_LOAD						= 0x200,
-	E_ADK_FAC_LOAD_FAIL					= 0x201,	// 현재 모듈을 인증하는 fac 파일이 없다.
+	E_ADK_NOT_SECURE_CONTENT			= 0xFF,		// 암호화되지 않은 파일
 
 	E_ADK_CONTENT						= 0x300,
-	E_ADK_CONTENT_OPEN_FAIL				= 0x301,
-	E_ADK_CONTENT_READ_FAIL				= 0x302,
-	E_ADK_CONTENT_WRITE_FAIL			= 0x303,
-	E_ADK_CONTENT_INVALID_LICENSE		= 0x304,
-	E_ADK_CONTENT_NOT_ENOUGH_INFO		= 0x305,	// 보안파일의 고유 정보를 얻을 수 없다.
-	E_ADK_CONTENT_PACK_FAIL				= 0x306,
-	E_ADK_CONTENT_SET_POINTER_FAIL		= 0x307,
-	E_ADK_CONTENT_SET_END_FAIL			= 0x308,
-	E_ADK_CONTENT_DIFFER_FROM_START		= 0x309,
-	E_ADK_CONTENT_INIT_RIGHTS_FAIL		= 0x30A,
-	E_ADK_CONTENT_LICENSE_DEL_FAIL		= 0x30B,
-	E_ADK_CONTENT_NOT_AUTOPACK_PROCESS	= 0x30C,
-
-	E_ADK_INTERNAL						= 0x400,
-	E_ADK_INTERNAL_GET_CLSID_FAIL		= 0x401,
-	E_ADK_INTERNAL_ENCRYPTION			= 0x402,
+	E_ADK_CONTENT_OPEN_FAIL				= 0x301,	// OpenContent 실패
+	E_ADK_CONTENT_READ_FAIL				= 0x302,	// ReadContent 실패
+	E_ADK_CONTENT_WRITE_FAIL			= 0x303,	// WriteContent 실패
+	E_ADK_CONTENT_INVALID_LICENSE		= 0x304,	// 권한이 유효하지 않음
+	E_ADK_CONTENT_PACK_FAIL				= 0x306,	// 암호화 실패
+	E_ADK_CONTENT_SET_POINTER_FAIL		= 0x307,	// SetContentPointer 실패
+	E_ADK_CONTENT_SET_END_FAIL			= 0x308,	// SetEndOfContent 실패
 	E_ADK_INTERNAL_NXL_GET_DOMAINID_FAIL= 0x403,
-	E_ADK_INTERNAL_FNC_POINTER_FAIL		= 0x404,
-
-	E_ADK_LIGHT_VERSION					= 0x500,
 
 	E_ADK_GENERAL						= 0xABCD,
 };
@@ -88,14 +62,17 @@ typedef unsigned int(*_LPGETAUTHENTICATE)
 char* szFilePath
 );
 
-typedef unsigned long(*_LPSETNOTIFYMESSAGE)();
+typedef unsigned long(*_LPSETNOTIFYMESSAGE)
+(
+void* pContentInfo, const char* UTF8FilePath, TO_OFFICE_DRM_EventIDEnum ID, void* param1, void* param2
+);
 
 typedef unsigned int(*_LPSETMENU)
 (
-unsigned int uiMenuID
+void* pContentInfo, const char* uiMenuID
 );
 
-typedef struct DocumentInterfaceManager
+typedef struct FasooDocumentInterfaceManager
 {
 	_LPGETVERSION pfngetVersion;
 	_LPGETAUTHENTICATE pfngetAuthenticate;
@@ -106,7 +83,7 @@ typedef DIM *LPDIM;
 
 typedef int(*_LPADKLISLICENSEVALIDBYPATH)
 (
-char *szFilePath, int iPurpose
+char *szFilePath, unsigned short wPurpose
 );
 
 typedef int(*_LPADKISSECURECONTENTBYPATH)
@@ -121,7 +98,7 @@ char *szFilePath, char *szDomainID, int iBufferSize
 
 typedef void* (*_LPADKOPENCONTENT)
 (
-char *szFilePath, int iWritable, int iTruncate
+char *szFilePath, char *szFileMode, bool bWritable, bool bTruncate
 );
 
 typedef int(*_LPADKISSECURECONTENT)
@@ -201,7 +178,7 @@ typedef unsigned long(*_LPADKGETCONTENTSIZE)
 void *pContentInfo
 );
 
-typedef struct SystemInterfaceManager
+typedef struct FasooSystemInterfaceManager
 {
 	_LPADKLISLICENSEVALIDBYPATH pfnADKIsLicenseVaildByPath;
 	_LPADKISSECURECONTENTBYPATH pfnADKIsSecureContentByPath;
@@ -233,6 +210,10 @@ typedef struct FVerInfo
 } FVI;
 typedef FVI* LPFVI;
 
+#ifdef __cplusplus
 extern "C"{
+#endif
 	int DRMInterfaceInitialize(void **ppDocumentInterface, void **ppSystemInterface, void *pOSInformation, void* pOfficeInformation);
+#ifdef __cplusplus
 }
+#endif
