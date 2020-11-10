@@ -22,9 +22,25 @@ OpenOS DRM Interface는 크게 문서 저작 도구 Application의 UI 관련 부
       * 프로그램 실행 (초기화)
       * 매크로 실행 전
       * 메뉴/단축키 실행 전
+   * 메뉴/단축키 제어
+   * 암호화된 문서의 사용 가능 여부
+* System Interface
    * 문서의 암호화 API
    * FILE 계열 C Standard API와 1:1 매칭 되는 FILE 관련 API Set
-* DRM 문서의 정보
-   * 암호화 된 문서의 권한 정보 확인
-   * 암호화 된 문서의 소유 고객사 확인
-- 문서의 Event 전송
+      * Open
+      * Read
+      * Write
+      * close
+      * Setting File Pointer
+      * Getting File Size
+   * DRM 문서의 정보
+      * 암호화 된 문서의 권한 정보 확인
+      * 암호화 된 문서의 소유 고객사 확인
+      * 암호화 문서의 종류
+      * 로그온 상태 정보
+   * 사용 내역 발송
+   * 에러 체크
+
+## 지원 환경
+   * 개방형 OS 및 Linux 사에서 동작하는 문서 저작 도구 중, C/C++로 Interface 연동이 가능한 제품
+   
