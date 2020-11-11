@@ -40,7 +40,7 @@ OpenOS DRM Interface는 크게 문서 저작 도구 Application의 UI 관련 부
       * 로그온 상태 정보
    * 사용 내역 발송
    * 에러 체크
-* 상세 인터페이스는 [개방형 OS 문서 저작 도구 DRM Interface.doc](./DOC/개발형 OS 문서 저작 도구 DRM Interface.docx) 참고
+* 상세 인터페이스는 [개방형 OS 문서 저작 도구 DRM Interface.doc](https://github.com/Fasoo-OpenProject/OpenOS-DRM/blob/master/DOC/%EA%B0%9C%EB%B0%A9%ED%98%95%20OS%20%EB%AC%B8%EC%84%9C%20%EC%A0%80%EC%9E%91%20%EB%8F%84%EA%B5%AC%20DRM%20Interface.docx) 참고
 
 ## 지원 환경
    * 개방형 OS 및 Linux 사에서 동작하는 문서 저작 도구 중, C/C++로 Interface 연동이 가능한 제품
