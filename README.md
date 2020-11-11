@@ -48,7 +48,9 @@ OpenOS DRM Interface는 크게 문서 저작 도구 Application의 UI 관련 부
       * [TMAX OS 3](https://tmaxanc.com/#!/product-introduce/TmaxOS) 
    * 문서 저작 도구
       * [ToOffice 3](https://tmaxanc.com/#!/product-introduce/ToOffice)
-   
+   * 컴파일러
+      * GCC/G++ 8.2.0
+      
 ## 적용 가이드
    * DRM Interface 연동 초기화
       * f_extadk.h를 소스에 포함(#include)
