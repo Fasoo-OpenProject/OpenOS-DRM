@@ -44,7 +44,33 @@ OpenOS DRM Interface는 크게 문서 저작 도구 Application의 UI 관련 부
 
 ## 지원 환경
    * 개방형 OS 및 Linux 사에서 동작하는 문서 저작 도구 중, C/C++로 Interface 연동이 가능한 제품
+   * OS
+      * [TMAX OS 3](https://tmaxanc.com/#!/product-introduce/TmaxOS) 
+   * 문서 저작 도구
+      * [ToOffice 3](https://tmaxanc.com/#!/product-introduce/ToOffice)
    
-## 현재 지원 환경
-   * [TMAX OS 3](https://tmaxanc.com/#!/product-introduce/TmaxOS) / [ToOffice 3](https://tmaxanc.com/#!/product-introduce/ToOffice)
+## 적용 가이드
+   * DRM Interface 연동 초기화
+      * f_extadk.h를 소스에 포함(#include)
+      * libfasooextadk.so 로드
+      * 외부 노출 초기화 함수 실행
+      * DRM Interface 획득
+      * Interface를 이용하여 상호 통신
+   * 인터페이스 정의서 API 참고
+   * [샘플코드](https://github.com/Fasoo-OpenProject/OpenOS-DRM/tree/master/ExtADK)
+   
+## 라이선스(License)
+Copyright 2020 Fasoo
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
    
