@@ -60,7 +60,9 @@ OpenOS DRM Interface는 크게 문서 저작 도구 Application의 UI 관련 부
       * Interface를 이용하여 상호 통신
    * 인터페이스 정의서 API 참고
    * [샘플코드](https://github.com/Fasoo-OpenProject/OpenOS-DRM/tree/master/ExtADK)
-   
+   * Test DRM Client
+      * 업데이트 예정
+      
 ## 라이선스(License)
 Copyright 2020 Fasoo
 
