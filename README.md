@@ -7,6 +7,8 @@
 * 여러 종류/회사의 문서 권한 관리 솔루션은 단일 규격의 Interface에 맞춰 문서 권한 관리 기능을 수행 하면 되기 때문에, 사용자 및 엔지니어는 동일 규격의 Application을 구축할 수 있게 되며, 동일 규격의 문서 권한 관리 시스템을 지원 할 수 있게 된다.
 * Interface를 이용하기 때문에 기존 문서 권한 관리 솔루션에서의 단점이 충돌 및 Hooking 등으로 인해 낭비되는 시스템 리소스를 최소화 할 수 있다.
 
+![openOS](https://user-images.githubusercontent.com/65989637/99772845-dcfddc00-2b4e-11eb-8fd6-6abf73cc8fee.JPG)
+
 ## OpenOS DRM Interface 구성
 OpenOS DRM Interface는 크게 문서 저작 도구 Application의 UI 관련 부분을 위한 'Document Interface'와, 파일의 입/출력 및 암호화된 파일의 정보 확인 등을 위한 'System Interface'로 나뉜다. 
 
