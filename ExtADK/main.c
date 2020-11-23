@@ -38,6 +38,7 @@ int main(void)
 
     //Initialize..
     (*T_DRMInterfaceInitialize)((void **)&pTI, (void **)&pSI, (void *)&fOSVI, (void *)&fOFFICEVI);
+    
     //Function call..
     (unsigned long)(pTI->pfngetVersion());
   
