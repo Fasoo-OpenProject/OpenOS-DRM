@@ -193,5 +193,6 @@ int main(int argc, char**argv)
 	}
 
 	dlclose(dlHandle);
+	
 	return 0;
 }
