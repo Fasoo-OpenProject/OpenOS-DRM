@@ -351,6 +351,7 @@ extern "C" bool _GetConfQueryKey(char* pTarget, char* pFlag, int target_index, c
 	return 0;
 }
 
+// ConfigJson 파일을 읽어 Key에 존재하는 Value 값을 모두 가져올 수 있는 함수 
 extern "C" bool _GetConfQueryValue(char* pTarget, char* pFlag, int target_index, char* pValueName)
 {
 	string strTarget(pTarget);
