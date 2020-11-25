@@ -127,6 +127,7 @@ extern "C" bool _ReadConfig(char* pTarget, char* pName, char* pFlag, char* pType
 	return 1;
 }
 
+// ConfigJson 파일을 읽어 원하는 값을 가져오는 함수 + Error 났을 시 어떤 Error로 인하여 문제가 생겼는지 return 해주는 
 extern "C" int _ReadConfigErr(char* pTarget, char* pName, char* pFlag, char* pType, void* pValue, unsigned long size)
 {
 	string strTarget(pTarget);
