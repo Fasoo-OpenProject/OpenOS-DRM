@@ -90,6 +90,8 @@ extern "C" bool _ReadConfig(char* pTarget, char* pName, char* pFlag, char* pType
 
 	}
 
+	// 기존에 reader.parse(ifs, obj)로 가져온 obj를 활용하여 원하는 경로의 json 데이터를 가져오려고 포인터를 제어하였지만, 기존에 읽은 원본의 json
+	// 데이터가 망가지기 때문에 obj_init에 넣어놓고 
 	obj_Init = obj[tok[1]];
 	i = 2;
 
