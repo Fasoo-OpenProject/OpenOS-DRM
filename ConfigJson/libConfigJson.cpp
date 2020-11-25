@@ -67,6 +67,7 @@ extern "C" bool _ReadConfig(char* pTarget, char* pName, char* pFlag, char* pType
 	Json::Value obj_Init;
 	int i;
 
+	// 레지스트리가 윈도우즈 64/32bit 환경에서 만들어진 경우 어떤 bit에서 만들어졌는지 확인하는 
 	bool b64 = false;
 	char str64[] = "x86_64";
 	struct utsname un;
