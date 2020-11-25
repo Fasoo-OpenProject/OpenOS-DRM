@@ -42,6 +42,7 @@ extern "C" bool _ReadConfig(char* pTarget, char* pName, char* pFlag, char* pType
 	Json::Value obj;
 	reader.parse(ifs, obj); // Reader can also read strings
 
+	// input 데이터 추출하고자하는 데이터 경로를 식별자를 통하여 토큰하
 	string stok = "\\";
 	int     nCutPos;
 	int     nIndex = 0;
