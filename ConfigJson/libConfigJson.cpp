@@ -246,7 +246,7 @@ extern "C" int _ReadConfigErr(char* pTarget, char* pName, char* pFlag, char* pTy
 	return CONFIGFILE_SUCCESS;
 }
 
-// ConfigJson 파일을 읽어 Key에 존재하는 Value의 이름을 가져올 수 있는 함수
+// ConfigJson 파일을 읽어 Key에 존재하는 Value의 이름을 모두 가져올 수 있는 함수
 extern "C" bool _GetConfQueryKey(char* pTarget, char* pFlag, int target_index, char* pKeyName)
 {
 	string strTarget(pTarget);
