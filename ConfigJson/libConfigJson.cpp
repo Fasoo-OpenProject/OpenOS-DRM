@@ -100,6 +100,8 @@ extern "C" bool _ReadConfig(char* pTarget, char* pName, char* pFlag, char* pType
 			delete tok;
 			break;
 		}
+		
+		// 원하는 경로의 json 데이터까지 접근하기 위해 recursive로 포인터를 이어나가는 로직
 		Json::Value tmp;
 		tmp = obj_Init[tok[i]];
 		obj_Init = tmp;
