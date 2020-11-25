@@ -17,6 +17,7 @@
 
 using namespace std;
 
+// ConfigJson 파일을 읽어 원하는 값을 가져오는 함수
 extern "C" bool _ReadConfig(char* pTarget, char* pName, char* pFlag, char* pType, void* pValue, unsigned long size)
 {
 	string strTarget(pTarget);
