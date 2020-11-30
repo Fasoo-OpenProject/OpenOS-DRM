@@ -4,16 +4,18 @@
 #include <dlfcn.h>
 #include <time.h>
 #include <utime.h>
-#include "DRMUtil.h"
+#include "f_extadk.h"
 #include "NXAPI.h"
 #include <unistd.h>
 
-#define EXTADK_PATH "/usr/lib/libofficedrmutil.so"
+#define EXTADK_PATH "/usr/local/fasoo/libfasooextadk.so"
 
-typedef int(*_TO_OFFICE_DRM_DRMInterfaceInitialize)(TO_OFFICE_DRM_DIM **ppDocumentInterface,
-	TO_OFFICE_DRM_SIM **ppSystemInterface,
-	TO_OFFICE_DRM_VI* pOSInformation,
-	TO_OFFICE_DRM_VI* pOfficeInformation);
+typedef int(*_LPDRMInterfaceInitialize)(void **ppDocumentInterface, void **ppSystemInterface, void *pOSInformation, void* pOfficeInformation);
+
+LPSIM g_lpSIM = NULL;
+LPDIM g_lpDIM = NULL;
+FVI g_fOSVI;
+FVI g_fOFFICEVI;
 
 int main(int argc, char**argv)
 {
@@ -31,18 +33,14 @@ int main(int argc, char**argv)
 		printf("dlopen success.\n");
 	}
 
-	_TO_OFFICE_DRM_DRMInterfaceInitialize pfnDRMInterfaceInitialize;
-	if ((pfnDRMInterfaceInitialize = (_TO_OFFICE_DRM_DRMInterfaceInitialize)dlsym(dlHandle, "TO_OFFICE_DRM_DRMInterfaceInitialize")) == NULL)
+	_LPDRMInterfaceInitialize pfnDRMInterfaceInitialize = (_LPDRMInterfaceInitialize)dlsym(dlHandle, "DRMInterfaceInitialize");
+	if (!pfnDRMInterfaceInitialize)
 	{
 		printf("dlsym error '%s'\n", dlerror());
 		dlclose(dlHandle);
 		return -1;
 	}
 
-	TO_OFFICE_DRM_DIM* pTI = NULL;
-	TO_OFFICE_DRM_SIM* pSI = NULL;
-	TO_OFFICE_DRM_VI fOSVI;
-	TO_OFFICE_DRM_VI fOFFICEVI;
 	char *szFilePath;
 	szFilePath = (char*)malloc(1024);
 
@@ -57,20 +55,31 @@ int main(int argc, char**argv)
 	printf("filepath '%s'\n", szFilePath);
 
 	//Initialize..
-	pfnDRMInterfaceInitialize((TO_OFFICE_DRM_DIM **)&pTI, (TO_OFFICE_DRM_SIM **)&pSI, (TO_OFFICE_DRM_VI *)&fOSVI, (TO_OFFICE_DRM_VI *)&fOFFICEVI);
+	if (pfnDRMInterfaceInitialize((void**)&g_lpDIM, (void**)&g_lpSIM, (void*)&g_fOSVI, (void*)&g_fOFFICEVI) == 0)
+	{
+		printf("DRMInterfaceInitialize failed.");
+
+		return false;
+	}
 
 	LPCONTENTINFO lpContentInfo = NULL;
 
 	if (strcasecmp(argv[2], "pack") == 0)
 	{
-		if (pSI->pfnDRMAutoPackContent(szFilePath) > 0)
+		if (g_lpSIM->pfnADKAutoPackContent(szFilePath) > 0)
 			printf("PackContent success.\n");
 		else
 			printf("PcakContent failed.\n");
 	}
 	else if (strcasecmp(argv[2], "open") == 0)
 	{
-		lpContentInfo = (LPCONTENTINFO)pSI->pfnDRMOpenContent(szFilePath, argv[3]);
+		// 아래 두 플래그는 FileMode에 따라 세팅되어야 함.
+		// bWritable = 쓰기 가능. FileMode 'r+' 'w' 'a' 등이 해당.
+		// bTruncate = 파일을 지우고 다시 씀. FileMode 'w'가 해당.
+		bool bWritable = true;
+		bool bTruncate = false;
+
+		lpContentInfo = (LPCONTENTINFO)g_lpSIM->pfnADKOpenContent(szFilePath, argv[3], bWritable, bTruncate);
 		if (lpContentInfo != NULL)
 			printf("OpenContent success.\n");
 		else
@@ -78,7 +87,7 @@ int main(int argc, char**argv)
 	}
 	else if (strcasecmp(argv[2], "issecure") == 0)
 	{
-		if (pSI->pfnDRMIsSecureContentByPath(szFilePath) > 0)
+		if (g_lpSIM->pfnADKIsSecureContentByPath(szFilePath) > 0)
 		{
 			printf("'%s' is secure file.\n", szFilePath);
 		}
@@ -91,7 +100,7 @@ int main(int argc, char**argv)
 	{
 		if (strcasecmp(argv[3], "view") == 0)
 		{
-			if (pSI->pfnDRMIsLicenseValidByPath(szFilePath, kDRMPurposeView) > 0)
+			if (g_lpSIM->pfnADKIsLicenseVaildByPath(szFilePath, kDRMPurposeView) > 0)
 			{
 				printf("'%s' VIEW license valid.\n", szFilePath);
 			}
@@ -103,7 +112,7 @@ int main(int argc, char**argv)
 		}
 		else if (strcasecmp(argv[3], "edit") == 0)
 		{
-			if (pSI->pfnDRMIsLicenseValidByPath(szFilePath, kDRMPurposeEdit) > 0)
+			if (g_lpSIM->pfnADKIsLicenseVaildByPath(szFilePath, kDRMPurposeEdit) > 0)
 			{
 				printf("'%s' EDIT license valid.\n", szFilePath);
 			}
@@ -114,7 +123,7 @@ int main(int argc, char**argv)
 		}
 		else if (strcasecmp(argv[3], "print") == 0)
 		{
-			if (pSI->pfnDRMIsLicenseValidByPath(szFilePath, kDRMPurposePrint) > 0)
+			if (g_lpSIM->pfnADKIsLicenseVaildByPath(szFilePath, kDRMPurposePrint) > 0)
 			{
 				printf("'%s' PRINT license valid.\n", szFilePath);
 			}
@@ -125,7 +134,7 @@ int main(int argc, char**argv)
 		}
 		else if (strcasecmp(argv[3], "save") == 0)
 		{
-			if (pSI->pfnDRMIsLicenseValidByPath(szFilePath, kDRMPurposeSave) > 0)
+			if (g_lpSIM->pfnADKIsLicenseVaildByPath(szFilePath, kDRMPurposeSave) > 0)
 			{
 				printf("'%s' SAVE license valid.\n", szFilePath);
 			}
@@ -136,7 +145,7 @@ int main(int argc, char**argv)
 		}
 		else if (strcasecmp(argv[3], "extract") == 0)
 		{
-			if (pSI->pfnDRMIsLicenseValidByPath(szFilePath, kDRMPurposeExtract) > 0)
+			if (g_lpSIM->pfnADKIsLicenseVaildByPath(szFilePath, kDRMPurposeExtract) > 0)
 			{
 				printf("'%s' EXTRACT license valid.\n", szFilePath);
 			}
@@ -148,12 +157,13 @@ int main(int argc, char**argv)
 	}
 	else if (strcasecmp(argv[2], "read") == 0)
 	{
-		lpContentInfo = (LPCONTENTINFO)pSI->pfnDRMOpenContent(szFilePath, "r");
+		const char *FileMode = "r";
+		lpContentInfo = (LPCONTENTINFO)g_lpSIM->pfnADKOpenContent(szFilePath, (char*)FileMode, false, false);
 		if (lpContentInfo != NULL)
 		{
 			char szBuffer[1024] = { 0 };
-			long lBytesReaden;
-			if (pSI->pfnDRMReadContent(lpContentInfo, &szBuffer, 50, &lBytesReaden) > 0)
+			unsigned long lBytesReaden;
+			if (g_lpSIM->pfnADKReadContent(lpContentInfo, &szBuffer, 50, &lBytesReaden) > 0)
 			{
 				printf("ReadContent success. '%s'", szBuffer);
 			}
@@ -165,11 +175,12 @@ int main(int argc, char**argv)
 	}
 	else if (strcasecmp(argv[2], "size") == 0)
 	{
+		const char *FileMode = "r";
 		unsigned long lSize = 0;
-		lpContentInfo = (LPCONTENTINFO)pSI->pfnDRMOpenContent(szFilePath, "r");
+		lpContentInfo = (LPCONTENTINFO)g_lpSIM->pfnADKOpenContent(szFilePath, (char*)FileMode, false, false);
 		if (lpContentInfo != NULL)
 		{
-			lSize = pSI->pfnDRMGetContentSize(lpContentInfo);
+			lSize = g_lpSIM->pfnADKGetContentSize(lpContentInfo);
 			if (lSize > 0)
 			{
 				printf("GetContentSize success. '%ld'\n", lSize);
@@ -182,7 +193,7 @@ int main(int argc, char**argv)
 	}
 	else if (strcasecmp(argv[2], "unpack") == 0)
 	{
-		if (pSI->pfnADKUnpackByContentPath(szFilePath, NULL))
+		if (g_lpSIM->pfnADKUnpackByContentPath(szFilePath, NULL))
 		{
 			printf("UnpackbyContentInfo success.\n");
 		}
@@ -193,6 +204,5 @@ int main(int argc, char**argv)
 	}
 
 	dlclose(dlHandle);
-	
 	return 0;
 }
