@@ -4,7 +4,7 @@ DRM 기능 Utility입니다.
 
 [환경구성]
 1. FasooDRM이 설치되어 있어야 합니다.
-2. /usr/lib 폴더에 libofficedrmutil.so 모듈이 존재해야 합니다.
+2. 본 툴을 직접 빌드할 시, ExtADK 폴더에 존재하는 f_extadk.h 파일이 있어야 합니다.
 
 [MakeFile]
 g++ -o DRMUtil DRMUtil.cpp -ldl
