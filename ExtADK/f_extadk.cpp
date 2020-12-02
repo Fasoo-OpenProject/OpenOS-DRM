@@ -136,6 +136,29 @@ unsigned int get_Authenticate(char *szFilePath)
 	return 1;
 }
 
+bool WriteLogFile(char* pszMessage)
+{
+	if (pszMessage == NULL)
+	{
+		return false;
+	}
+	bool bResult = true;
+	FILE* hFile = fopen("/usr/local/fasoo/log/f_extadk.log", "ab+");
+	if (hFile == NULL)
+	{
+		return false;
+	}
+	unsigned int dwPos = fseek(hFile, 0, SEEK_END);
+	if (dwPos != -1)
+	{
+		long dwBytes = fwrite(pszMessage, sizeof(char), strlen(pszMessage), hFile);
+		if (strlen(pszMessage) > dwBytes)
+			bResult = false;
+	}
+	fclose(hFile);
+	return bResult;
+}
+
 unsigned long set_NotifyMessage(void* pContentInfo, const char* UTF8FilePath, TO_OFFICE_DRM_EventIDEnum ID, void* param1, void* param2)
 {
 	LPCONTENTINFO lpContentInfo = (LPCONTENTINFO)pContentInfo;
@@ -145,13 +168,21 @@ unsigned long set_NotifyMessage(void* pContentInfo, const char* UTF8FilePath, TO
 	unsigned long dwPurpose = 0;
 	switch (ID)
 	{
+	case kDRMEventIDDocumentBeforeOpen:
+		{
+			break;
+		}
 	case kDRMEventIDDocumentAfterOpen:
 		{
 			dwPurpose = ADK_PURPOSE_VIEW;
 			break;
 		}
+	case kDRMEventIDDocumentBeforeSave:
+		{										  
+			break;
+		}
 	case kDRMEventIDDocumentAfterSave:
-		{
+		{	
 			dwPurpose = ADK_PURPOSE_SECURE_SAVE;
 			break;
 		}
@@ -193,11 +224,11 @@ unsigned int set_Menu(void* pContentInfo, const char* szMenuID)
 		strcasecmp(szMenuID, "TH_SAVE_FILE_AS_PDF") == 0 ||
 		strcasecmp(szMenuID, "TH_SAVE_INSERTED_PICTURE") == 0 ||
 		strcasecmp(szMenuID, "TH_DIALOG_SAVE_INSERTED_PICTURE") == 0)
-	{
-		_FTRACEA(2, "[_TO_OFFICE_DRM_PFN_setMenu] SECURE_SAVE invalid.");
-		
+	{		
 		if (!g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_SECURE_SAVE))
 		{
+			_FTRACEA(2, "[_TO_OFFICE_DRM_PFN_setMenu] SECURE_SAVE invalid.");
+
 			return 0;
 		}
 	}
@@ -210,7 +241,7 @@ unsigned int set_Menu(void* pContentInfo, const char* szMenuID)
 		if (!g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_MACRO))
 		{
 			_FTRACEA(2, "[_TO_OFFICE_DRM_PFN_setMenu] MACRO invalid.");
-
+			
 			return 0;
 		}
 	}
@@ -225,7 +256,7 @@ unsigned int set_Menu(void* pContentInfo, const char* szMenuID)
 		strcasecmp(szMenuID, "TH_PRINT") == 0 ||
 		strcasecmp(szMenuID, "TH_PRINT_IN_PREVIEW") == 0)
 	{
-		if (!g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_MACRO))
+		if (!g_pNxlInterface->IsLicenseValid(lpContentInfo, ADK_PURPOSE_PRINT))
 		{
 			_FTRACEA(2, "[_TO_OFFICE_DRM_PFN_setMenu] PRINT invalid.");
 
@@ -255,8 +286,6 @@ bool ADK_NxInitialize()
 	{
 		void* hDll = NULL;
 		
-		// https://www.joinc.co.kr/w/Site/C++/Documents/Dynamic_Class_Loading
-
 		hDll = dlopen(NXLPATH, RTLD_LAZY);
 		if (!hDll)
 		{
@@ -909,7 +938,7 @@ int ADK_PackContent(void *pContentInfoTarget, void *pContentInfoTemplate)
 int ADK_AutoPackContent(char *szFilePath)
 {
 	_FTRACEA(2, "[ADK_AutoPackContent] Enter.. '%s'", szFilePath);
-
+	
 	if (NULL == szFilePath || '\0' == szFilePath[0])
 	{
 		_FTRACEA(2, "[ADK_AutoPackContent] Invalid param.");
@@ -1063,6 +1092,52 @@ unsigned long ADK_GetContentSize(void *pContentInfo)
 	return dwContentSize;
 }
 
+int ADK_UnpackByContentPath(char *szSrcFilePath, char *szDstFilePath)
+{
+	_FTRACEA(2, "[ADK_UnpackByContentPath] Enter..");
+
+	if (NULL == szSrcFilePath || '\0' == szSrcFilePath[0])
+	{
+		_FTRACEA(2, "[ADK_UnpackByContentPath] Invalid param.");
+
+		ADK_SetLastError(kDRMErrorInvalidArgs);
+
+		return 0;
+	}
+
+	if (ADK_NxInitialize() == 0)
+	{
+		_FTRACEA(2, "[ADK_UnpackByContentPath] NxInitialize failed.");
+
+		ADK_SetLastError(kDRMErrorModuleInitFail);
+
+		return 0;
+	}
+
+	std::wstring wstrFilePath = mbs_to_wcs(szSrcFilePath);
+	wchar_t* wcsFilePath = (wchar_t*)malloc((wstrFilePath.length() + 1) * sizeof(wchar_t));
+	wcscpy(wcsFilePath, wstrFilePath.c_str());
+
+	unsigned long dwRet = g_pNxlInterface->UnpackByContentPath(wcsFilePath, NULL, true, true, false);
+	if (dwRet != 0)
+	{
+		_FTRACEA(2, "[ADK_UnpackbyContentInfo] UnpackbyContentInfo failed. '%ld'", dwRet);
+		
+		ADK_SetLastError(E_ADK_CONTENT_UNPACK_FAIL);
+
+		if (dwRet == 113L)
+		{
+			g_pNxlInterface->SendNotificationToMessageServer(103L, NULL);
+		}		
+
+		return 0;
+	}
+
+	_FTRACEA(2, "[ADK_UnpackbyContentInfo] UnpackbyContentInfo success.");
+
+	return 1;
+}
+
 #pragma GCC visibility push(default)
 int DRMInterfaceInitialize(void **ppDocumentInterface, void **ppSystemInterface, void *pOSInformation, void* pOfficeInformation)
 {
@@ -1103,6 +1178,7 @@ int DRMInterfaceInitialize(void **ppDocumentInterface, void **ppSystemInterface,
 	g_lpSIM->pfnADKSetUsage = ADK_SetUsage;
 	g_lpSIM->pfnADKIsLogonStatus = ADK_IsLogonStatus;
 	g_lpSIM->pfnADKGetContentSize = ADK_GetContentSize;
+	g_lpSIM->pfnADKUnpackByContentPath = ADK_UnpackByContentPath;
 
 	*(LPSIM *)ppSystemInterface = g_lpSIM;
 
