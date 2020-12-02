@@ -52,19 +52,50 @@ OpenOS DRM Interface는 크게 문서 저작 도구 Application의 UI 관련 부
       * [ToOffice 3](https://tmaxanc.com/#!/product-introduce/ToOffice)
    * 컴파일러
       * GCC/G++ 8.2.0
-      
-## 적용 가이드
+
+## 적용 프로세스
+   * DRM Interface의 적용을 위해서는 반드시 파수와 먼저 협의 필요.
+   * 인터페이스 문서에 권한에 대한 설명이 있지만, 문서 저자 도구(Office)의 기능이 Application 별로 특성이 있어 권한과 맞게 설정하기 위해 DRM 개발사와 사전확인 작업이 필요.
+   * DRM 적용 프로세스는 아래와 같음.
+      1. DRM 개발사 Contact
+         * 테스트용 SSO 사용자 ID 전달 및 문의 사항 답변 
+      1. DRM Interface API 설명 확인
+         * 적용하려는 Application에 DRM Interface 및 DRM 적용이 가능 한가?
+      2. Test DRM Client 패키지 설치
+         * DRM Interface를 적용 하면서 또는 적용 후, 정상 동작 확인 
+      3. DRM Interface 적용 (인터페이스 정의서 및 샘플코드 참조)
+         * 인터페이스 정의서 및 샘플코드 참조
+         * 이슈 게시판 등을 통해 문의
+      4. 권한에 따라 Application이 제어가 되는지 확인 ( 적용자 / DRM 개발사 )
+         * 잘못된 권한에 따른 DRM Interface 적용으로 보호 되어야 할 데이터가 유출 방지 차원 
+      5. 적용 Application 출시
+   
+
+## 적용 가이드 (개발)
    * DRM Interface 연동 초기화
       * f_extadk.h를 소스에 포함(#include)
       * libfasooextadk.so 로드
       * 외부 노출 초기화 함수 실행
       * DRM Interface 획득
       * Interface를 이용하여 상호 통신
-   * [인터페이스 정의서](https://github.com/Fasoo-OpenProject/OpenOS-DRM/blob/master/DOC/%EA%B0%9C%EB%B0%A9%ED%98%95%20OS%20%EB%AC%B8%EC%84%9C%20%EC%A0%80%EC%9E%91%20%EB%8F%84%EA%B5%AC%20DRM%20Interface.docx) API 참고
+   * [인터페이스 정의서](https://github.com/Fasoo-OpenProject/OpenOS-DRM/blob/master/DOC/%EA%B0%9C%EB%B0%A9%ED%98%95%20OS%20%EB%AC%B8%EC%84%9C%20%EC%A0%80%EC%9E%91%20%EB%8F%84%EA%B5%AC%20DRM%20Interface.docx) API 참고, (샘플 코드 포함)
    * [샘플코드](https://github.com/Fasoo-OpenProject/OpenOS-DRM/tree/master/ExtADK)
-   * Test DRM Client
-      * 업데이트 예정
+   * Test DRM Client (TMAX 3.0), 'FasooDRM 패키저 적용하기' 참고
+      * DRM Client 설치 및 동작의 간략한 확인
+         *API를 이용하여 문서를 암호화 했을 때, SSO 로그인 창이 발생하면 DRM Client 설치 및 동작이 정상
       
+## FasooDRM 패키저 적용하기
+(1) TestPackage.zip 파일 압축 해제 
+
+        unzip TestPackage.zip
+
+(2) 압축 해제된 pkg-build-fasooDRM.deb 패키저 파일 설치
+
+        sudo dpkg --install pkg-build-fasooDRM.deb
+        sudo apt-get update
+        sudo apt-get install -f
+
+
 ## 라이선스(License)
 Copyright 2020 Fasoo
 
